@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -26,6 +27,12 @@ func (cu *CacheControlUpdater) Run() error {
 	ctx := context.Background()
 	client := cu.App.S3Client
 	bucket := cu.App.Config.Storage.Bucket
+
+	failedLog, err := os.OpenFile("logs/fail_updated_img.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return fmt.Errorf("failed to open failed log file: %v", err)
+	}
+	defer failedLog.Close()
 
 	paginator := s3.NewListObjectsV2Paginator(client, &s3.ListObjectsV2Input{
 		Bucket: aws.String(bucket),
@@ -62,6 +69,7 @@ func (cu *CacheControlUpdater) Run() error {
 			})
 			if err != nil {
 				log.Printf("failed to read metadata for %s: %v", key, err)
+				fmt.Fprintln(failedLog, key)
 				continue
 			}
 
@@ -81,6 +89,7 @@ func (cu *CacheControlUpdater) Run() error {
 			})
 			if err != nil {
 				log.Printf("Failed to update Cache-Control for %s: %v", key, err)
+				fmt.Fprintln(failedLog, key)
 				continue
 			}
 
