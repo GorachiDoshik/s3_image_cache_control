@@ -1,0 +1,9 @@
+temp/config.toml
+
+build/*
+
+!build/.gitkeep
+
+logs/*.log
+
+.env
