@@ -16,7 +16,7 @@ type CacheControlUpdater struct {
 }
 
 const (
-	BATCH_SIZE      = 5
+	BATCH_SIZE      = 50
 	CACHE_CONTROL   = "max-age=2592000"
 	PREFIX_DEV_DIR  = "cache_control_test"
 	PREFIX_PROD_DIR = "iblock"
@@ -34,9 +34,15 @@ func (cu *CacheControlUpdater) Run() error {
 	}
 	defer failedLog.Close()
 
+	appLog, err := os.OpenFile("logs/app.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return fmt.Errorf("failed to open app log file: %v", err)
+	}
+	defer appLog.Close()
+
 	paginator := s3.NewListObjectsV2Paginator(client, &s3.ListObjectsV2Input{
 		Bucket: aws.String(bucket),
-		Prefix: aws.String(PREFIX_DEV_DIR),
+		Prefix: aws.String(PREFIX_PROD_DIR),
 	})
 
 	pageNum := 0
@@ -74,10 +80,10 @@ func (cu *CacheControlUpdater) Run() error {
 			}
 
 			log.Printf("[%d] %s", totalProcessed+1, key)
-			log.Printf("  Content-Type: %s", aws.ToString(head.ContentType))
-			log.Printf("  Cache-Control: %s", aws.ToString(head.CacheControl))
-			log.Printf("  Last-Modified: %v", head.LastModified)
-			log.Printf("-----------------------------------------")
+			// log.Printf("  Content-Type: %s", aws.ToString(head.ContentType))
+			// log.Printf("  Cache-Control: %s", aws.ToString(head.CacheControl))
+			// log.Printf("  Last-Modified: %v", head.LastModified)
+			// log.Printf("-----------------------------------------")
 
 			_, err = client.CopyObject(ctx, &s3.CopyObjectInput{
 				Bucket:            aws.String(bucket),
@@ -97,11 +103,17 @@ func (cu *CacheControlUpdater) Run() error {
 			totalProcessed++
 
 			if batchProcessed >= BATCH_SIZE {
-				log.Printf("🌈 batch of %d completed, moving to next batch...", BATCH_SIZE)
+				progressMsg := fmt.Sprintf("Processed batch: %d images, total processed: %d\n", batchProcessed, totalProcessed)
+				fmt.Fprint(appLog, progressMsg)
+
+				log.Print("🌈 " + progressMsg)
+				// log.Printf("🌈 batch of %d completed, moving to next batch...", BATCH_SIZE)
 				batchProcessed = 0
 			}
 		}
 	}
+
+	fmt.Fprintf(appLog, "finished processing. Total updated: %d\n", totalProcessed)
 
 	log.Printf("done proccess! Total updated: %d objects.", totalProcessed)
 	return nil
